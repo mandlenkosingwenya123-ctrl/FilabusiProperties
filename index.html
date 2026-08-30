@@ -1,1 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FilabusiProperties</title>
+<meta name="description" content="Buy, sell, and rent property in Filabusi and Insiza District. Search listings by location and price, contact agents directly, and post your own stand, house, or plot." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<!-- React + ReactDOM (UMD builds, work without a bundler) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<!-- Babel standalone: lets the browser understand JSX directly, no build step -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<!-- Supabase client (UMD build) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Public Sans', sans-serif; background: #F6F1E4; color: #2B2620; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+// ====== EDIT THESE TWO LINES with your own Supabase project details ======
+// Project Settings > API in your Supabase dashboard.
+// Run supabase-schema.sql in the SQL Editor first to create the table.
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+// ===========================================================================
+
+const supabaseClient = (SUPABASE_URL && SUPABASE_ANON_KEY)
+? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+: null;
+
+const LOCATIONS = ["Filabusi Town", "Mbalabala", "Fort Rixon", "Avoca", "Insiza Rural", "Maphisa Road"];
+const CATEGORIES = ["Residential stand", "House", "Agricultural plot", "Commercial stand"];
+const FEATURED_FEE = 30;
+
+const SEED_PROPERTIES = [
+{ id: "p1", title: "3-bedroom brick home, fenced yard", listingType: "sale", category: "House", price: 18000, currency: "USD", location: "Filabusi Town", size: "1200 sqm stand", bedrooms: 3, description: "Solid brick-under-tile home close to the growth point. Borehole on site, fruit trees, durawall fencing.", agentName: "Thabani Moyo", agentPhone: "+263 77 123 4567", verified: true, featured: false, tone: "coral" },
+{ id: "p2", title: "Residential stand, ready to build", listingType: "sale", category: "Residential stand", price: 3500, currency: "USD", location: "Mbalabala", size: "800 sqm", bedrooms: null, description: "Cleared, pegged stand along the Mbalabala road. Offer letter available, close to clinic and school.", agentName: "Nomvula Ncube", agentPhone: "+263 71 234 5678", verified: true, featured: false, tone: "green" },
+{ id: "p3", title: "2-bedroom cottage to let", listingType: "rent", category: "House", price: 90, currency: "USD", location: "Filabusi Town", size: "—", bedrooms: 2, description: "Quiet cottage with own entrance, water tank, and solar backup. Ideal for a small family or teacher posting.", agentName: "Sipho Dube", agentPhone: "+263 78 345 6789", verified: false, featured: false, tone: "amber" },
+{ id: "p4", title: "5-acre agricultural plot", listingType: "sale", category: "Agricultural plot", price: 6000, currency: "USD", location: "Insiza Rural", size: "5 acres", bedrooms: null, description: "Grazing and cropping land near the Insiza river line. Communal land, negotiable through village head.", agentName: "Thabani Moyo", agentPhone: "+263 77 123 4567", verified: false, featured: false, tone: "green" },
+{ id: "p5", title: "Shop premises on main road", listingType: "rent", category: "Commercial stand", price: 250, currency: "USD", location: "Filabusi Town", size: "60 sqm", bedrooms: null, description: "Trading space fronting the main Filabusi–Bulawayo road, high foot traffic, roller door, ZESA connected.", agentName: "Nomvula Ncube", agentPhone: "+263 71 234 5678", verified: true, featured: false, tone: "coral" },
+{ id: "p6", title: "Stand near Fort Rixon growth point", listingType: "sale", category: "Residential stand", price: 2200, currency: "USD", location: "Fort Rixon", size: "700 sqm", bedrooms: null, description: "Affordable stand a short walk from the growth point shops and bus terminus.", agentName: "Sipho Dube", agentPhone: "+263 78 345 6789", verified: false, featured: false, tone: "amber" },
+];
+
+const TONE = {
+coral: { bg: "#F2DFD3", fg: "#7A3319" },
+green: { bg: "#DCE4CC", fg: "#3B4A2D" },
+amber: { bg: "#F3E1BB", fg: "#6B4A16" },
+};
+
+// ---- Small inline icon components (no icon library dependency) ----
+const Icon = ({ children, size = 16, color = "currentColor", style }) => (
+<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>{children}</svg>
+);
+const SearchIcon = (p) => <Icon {...p}><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Icon>;
+const MapPinIcon = (p) => <Icon {...p}><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></Icon>;
+const HomeIcon = (p) => <Icon {...p}><path d="M3 9l9-7 9 7" /><path d="M9 22V12h6v10" /></Icon>;
+const HeartIcon = ({ fill = "none", ...p }) => <Icon fill={fill} {...p}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.6z" /></Icon>;
+const PhoneIcon = (p) => <Icon {...p}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1 1 .3 2 .6 2.9a2 2 0 0 1-.5 2.1L7.9 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.5 2.9.6a2 2 0 0 1 1.8 2z" /></Icon>;
+const CameraIcon = (p) => <Icon {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></Icon>;
+const PlusIcon = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+const UserIcon = (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></Icon>;
+const XIcon = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+const CheckIcon = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12" /></Icon>;
+const ChevronDownIcon = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9" /></Icon>;
+
+function Stamp({ size = 34 }) {
+return (
+<svg width={size} height={size} viewBox="0 0 60 60" style={{ flexShrink: 0 }}>
+<circle cx="30" cy="30" r="27" fill="none" stroke="#8A5A2E" strokeWidth="2" strokeDasharray="2 3" />
+<circle cx="30" cy="30" r="20" fill="none" stroke="#8A5A2E" strokeWidth="1.5" />
+<path d="M20 32 L27 39 L41 23" fill="none" stroke="#8A5A2E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+);
+}
+
+function Money({ price, currency, listingType }) {
+return (
+<span style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+{currency} {price.toLocaleString()}{listingType === "rent" ? " / mo" : ""}
+</span>
+);
+}
+
+function FilabusiProperties() {
+const [properties, setProperties] = useState([]);
+const [favorites, setFavorites] = useState([]);
+const [user, setUser] = useState(null);
+const [ready, setReady] = useState(false);
+
+const [view, setView] = useState("browse");
+const [query, setQuery] = useState("");
+const [locationFilter, setLocationFilter] = useState("All areas");
+const [typeFilter, setTypeFilter] = useState("all");
+const [categoryFilter, setCategoryFilter] = useState("All types");
+const [maxPrice, setMaxPrice] = useState("");
+const [filtersOpen, setFiltersOpen] = useState(false);
+const [selected, setSelected] = useState(null);
+
+const [authForm, setAuthForm] = useState({ name: "", phone: "" });
+const [authError, setAuthError] = useState("");
+
+const [listingForm, setListingForm] = useState({
+title: "", listingType: "sale", category: CATEGORIES[0], price: "", currency: "USD",
+location: LOCATIONS[0], size: "", bedrooms: "", description: "", agentPhone: "", featured: false,
+});
+const [formError, setFormError] = useState("");
+const [formSuccess, setFormSuccess] = useState(false);
+const [ecocashNumber, setEcocashNumber] = useState("");
+const [paymentStatus, setPaymentStatus] = useState("idle");
+
+useEffect(() => {
+(async () => {
+if (supabaseClient) {
+const { data, error } = await supabaseClient.from("properties").select("*").order("created_at", { ascending: false });
+if (!error && data && data.length > 0) {
+setProperties(data.map((row) => row.data));
+} else if (!error) {
+const rows = SEED_PROPERTIES.map((p) => ({ id: p.id, featured: false, data: p }));
+await supabaseClient.from("properties").insert(rows);
+setProperties(SEED_PROPERTIES);
+} else {
+console.error("Supabase read failed:", error.message);
+setProperties(SEED_PROPERTIES);
+}
+} else {
+setProperties(SEED_PROPERTIES);
+}
+try {
+const favs = localStorage.getItem("filaproperty_favorites");
+if (favs) setFavorites(JSON.parse(favs));
+} catch (e) {}
+try {
+const acct = localStorage.getItem("filaproperty_account");
+if (acct) setUser(JSON.parse(acct));
+} catch (e) {}
+setReady(true);
+})();
+}, []);
+
+function toggleFavorite(id) {
+const next = favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id];
+setFavorites(next);
+try { localStorage.setItem("filaproperty_favorites", JSON.stringify(next)); } catch (e) {}
+}
+
+function createAccount(e) {
+e.preventDefault();
+if (!authForm.name.trim() || !authForm.phone.trim()) {
+setAuthError("Enter your name and phone number.");
+return;
+}
+const acct = { name: authForm.name.trim(), phone: authForm.phone.trim() };
+setUser(acct);
+setAuthError("");
+try { localStorage.setItem("filaproperty_account", JSON.stringify(acct)); } catch (e) {}
+}
+
+function signOut() {
+setUser(null);
+try { localStorage.removeItem("filaproperty_account"); } catch (e) {}
+}
+
+function payEcocash() {
+if (!ecocashNumber.trim()) {
+setFormError("Enter the EcoCash number to charge.");
+return;
+}
+setFormError("");
+setPaymentStatus("processing");
+setTimeout(() => setPaymentStatus("paid"), 1400);
+}
+
+async function submitListing(e) {
+e.preventDefault();
+const { title, price, size, description, agentPhone, featured } = listingForm;
+if (!title.trim() || !price || !size.trim() || !description.trim() || !agentPhone.trim()) {
+setFormError("Fill in every field before posting.");
+return;
+}
+if (Number(price) <= 0) {
+setFormError("Enter a price greater than zero.");
+return;
+}
+if (featured && paymentStatus !== "paid") {
+setFormError("Complete the EcoCash payment to feature this listing.");
+return;
+}
+const tones = Object.keys(TONE);
+const newListing = {
+id: "p" + Date.now(),
+title: title.trim(),
+listingType: listingForm.listingType,
+category: listingForm.category,
+price: Number(price),
+currency: listingForm.currency,
+location: listingForm.location,
+size: size.trim(),
+bedrooms: listingForm.bedrooms ? Number(listingForm.bedrooms) : null,
+description: description.trim(),
+agentName: user.name,
+agentPhone: agentPhone.trim(),
+verified: false,
+featured: !!featured,
+tone: tones[Math.floor(Math.random() * tones.length)],
+};
+if (supabaseClient) {
+const { error } = await supabaseClient.from("properties").insert([{ id: newListing.id, featured: newListing.featured, data: newListing }]);
+if (error) {
+setFormError("Couldn't save your listing. Try again — " + error.message);
+return;
+}
+}
+setProperties([newListing, ...properties]);
+setFormError("");
+setFormSuccess(true);
+setListingForm({ title: "", listingType: "sale", category: CATEGORIES[0], price: "", currency: "USD", location: LOCATIONS[0], size: "", bedrooms: "", description: "", agentPhone: "", featured: false });
+setEcocashNumber("");
+setPaymentStatus("idle");
+setTimeout(() => setFormSuccess(false), 2500);
+}
+
+const filtered = useMemo(() => {
+return properties.filter((p) => {
+if (query && !p.title.toLowerCase().includes(query.toLowerCase()) && !p.location.toLowerCase().includes(query.toLowerCase())) return false;
+if (locationFilter !== "All areas" && p.location !== locationFilter) return false;
+if (typeFilter !== "all" && p.listingType !== typeFilter) return false;
+if (categoryFilter !== "All types" && p.category !== categoryFilter) return false;
+if (maxPrice && p.price > Number(maxPrice)) return false;
+return true;
+});
+}, [properties, query, locationFilter, typeFilter, categoryFilter, maxPrice]);
+
+const favoriteProperties = properties.filter((p) => favorites.includes(p.id));
+const sortFeatured = (list) => [...list].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+const displayList = sortFeatured(view === "favorites" ? favoriteProperties : filtered);
+
+return (
+<div style={{ fontFamily: "'Public Sans', sans-serif", background: "#F6F1E4", color: "#2B2620", minHeight: "100vh" }}>
+<header style={{ background: "#2B2620", color: "#F6F1E4", padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+<Stamp size={30} />
+<div>
+<div style={{ fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, letterSpacing: 0.2 }}>FilabusiProperties</div>
+<div style={{ fontSize: 11, opacity: 0.65, letterSpacing: 0.5, textTransform: "uppercase" }}>Filabusi &amp; Insiza District</div>
+</div>
+</div>
+<div style={{ display: "flex", gap: 6 }}>
+{["browse", "favorites", "add", "account"].map((v) => (
+<button key={v} onClick={() => setView(v)}
+style={{
+background: view === v ? "#F6F1E4" : "transparent",
+color: view === v ? "#2B2620" : "#F6F1E4",
+border: "1px solid rgba(246,241,228,0.3)", borderRadius: 20,
+padding: "6px 10px", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 5,
+}}>
+{v === "browse" && <SearchIcon size={13} />}
+{v === "favorites" && <HeartIcon size={13} />}
+{v === "add" && <PlusIcon size={13} />}
+{v === "account" && <UserIcon size={13} />}
+</button>
+))}
+</div>
+</header>
+
+<main style={{ maxWidth: 1000, margin: "0 auto", padding: 20 }}>
+{view === "browse" && (
+<React.Fragment>
+<div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+<div style={{ flex: "1 1 220px", position: "relative" }}>
+<SearchIcon size={16} style={{ position: "absolute", left: 12, top: 12, color: "#8A8578" }} />
+<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name or area"
+style={{ width: "100%", padding: "10px 12px 10px 36px", borderRadius: 10, border: "1px solid #D8CFB8", background: "#FFFDF7", fontSize: 14 }} />
+</div>
+<button onClick={() => setFiltersOpen(!filtersOpen)}
+style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #D8CFB8", background: "#FFFDF7", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+Filters <ChevronDownIcon size={14} style={{ transform: filtersOpen ? "rotate(180deg)" : "none" }} />
+</button>
+</div>
+
+{filtersOpen && (
+<div style={{ background: "#FFFDF7", border: "1px solid #D8CFB8", borderRadius: 12, padding: 16, marginBottom: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+<div>
+<div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#8A8578", marginBottom: 4 }}>
+<MapPinIcon size={11} style={{ verticalAlign: -1 }} /> Location
+</div>
+<select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+<option>All areas</option>
+{LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+</select>
+</div>
+<div>
+<div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#8A8578", marginBottom: 4 }}>
+<HomeIcon size={11} style={{ verticalAlign: -1 }} /> For sale or rent
+</div>
+<select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+<option value="all">Both</option>
+<option value="sale">For sale</option>
+<option value="rent">For rent</option>
+</select>
+</div>
+<div>
+<div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#8A8578", marginBottom: 4 }}>Property type</div>
+<select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+<option>All types</option>
+{CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+</select>
+</div>
+<div>
+<div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#8A8578", marginBottom: 4 }}>Max price (USD)</div>
+<input type="number" min="0" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="No limit"
+style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+</div>
+</div>
+)}
+</React.Fragment>
+)}
+
+{(view === "browse" || view === "favorites") && (
+<React.Fragment>
+{view === "favorites" && <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 12 }}>Saved properties</h2>}
+{ready && displayList.length === 0 && (
+<div style={{ textAlign: "center", padding: 40, color: "#8A8578" }}>
+{view === "favorites" ? "Nothing saved yet — tap the heart on a listing to save it." : "No properties match those filters."}
+</div>
+)}
+<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 14 }}>
+{displayList.map((p) => {
+const t = TONE[p.tone] || TONE.coral;
+return (
+<div key={p.id} onClick={() => setSelected(p)}
+style={{ background: "#FFFDF7", border: p.featured ? "2px solid #C68B2C" : "1px solid #D8CFB8", borderRadius: 12, overflow: "hidden", cursor: "pointer" }}>
+<div style={{ background: t.bg, height: 100, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+<CameraIcon size={22} color={t.fg} style={{ opacity: 0.5 }} />
+{p.featured && (
+<div style={{ position: "absolute", top: 8, left: 8, background: "#C68B2C", color: "#4A2F06", fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 600 }}>
+Featured
+</div>
+)}
+{p.verified && (
+<div style={{ position: "absolute", top: p.featured ? 32 : 8, left: 8, background: "#2B2620", color: "#F6F1E4", fontSize: 10, padding: "3px 8px", borderRadius: 10, display: "flex", alignItems: "center", gap: 3 }}>
+<CheckIcon size={10} /> Verified
+</div>
+)}
+<button onClick={(e) => { e.stopPropagation(); toggleFavorite(p.id); }}
+style={{ position: "absolute", top: 8, right: 8, background: "rgba(255,253,247,0.85)", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
+<HeartIcon size={14} fill={favorites.includes(p.id) ? "#7A3319" : "none"} color="#7A3319" />
+</button>
+<div style={{ position: "absolute", bottom: 8, left: 8, background: "#2B2620", color: "#F6F1E4", fontSize: 10, padding: "3px 8px", borderRadius: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>
+{p.listingType === "sale" ? "For sale" : "For rent"}
+</div>
+</div>
+<div style={{ padding: 12 }}>
+<div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3, lineHeight: 1.3 }}>{p.title}</div>
+<div style={{ fontSize: 12, color: "#8A8578", marginBottom: 6, display: "flex", alignItems: "center", gap: 3 }}>
+<MapPinIcon size={11} /> {p.location}
+</div>
+<div style={{ fontSize: 15, fontWeight: 600, color: "#7A3319" }}>
+<Money price={p.price} currency={p.currency} listingType={p.listingType} />
+</div>
+</div>
+</div>
+);
+})}
+</div>
+</React.Fragment>
+)}
+
+{view === "add" && (
+user ? (
+<div style={{ maxWidth: 480, margin: "0 auto" }}>
+<h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 4 }}>List a property</h2>
+<p style={{ fontSize: 13, color: "#8A8578", marginBottom: 16 }}>Posting as {user.name}</p>
+<form onSubmit={submitListing} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+<input placeholder="Property title" value={listingForm.title} onChange={(e) => setListingForm({ ...listingForm, title: e.target.value })}
+style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+<div style={{ display: "flex", gap: 10 }}>
+<select value={listingForm.listingType} onChange={(e) => setListingForm({ ...listingForm, listingType: e.target.value })} style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+<option value="sale">For sale</option>
+<option value="rent">For rent</option>
+</select>
+<select value={listingForm.category} onChange={(e) => setListingForm({ ...listingForm, category: e.target.value })} style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+{CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+</select>
+</div>
+<div style={{ display: "flex", gap: 10 }}>
+<input type="number" placeholder="Price" value={listingForm.price} onChange={(e) => setListingForm({ ...listingForm, price: e.target.value })}
+style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+<select value={listingForm.currency} onChange={(e) => setListingForm({ ...listingForm, currency: e.target.value })} style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+<option>USD</option>
+<option>ZWG</option>
+</select>
+</div>
+<select value={listingForm.location} onChange={(e) => setListingForm({ ...listingForm, location: e.target.value })} style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }}>
+{LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+</select>
+<div style={{ display: "flex", gap: 10 }}>
+<input placeholder="Size (e.g. 800 sqm)" value={listingForm.size} onChange={(e) => setListingForm({ ...listingForm, size: e.target.value })}
+style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+<input type="number" placeholder="Bedrooms (optional)" value={listingForm.bedrooms} onChange={(e) => setListingForm({ ...listingForm, bedrooms: e.target.value })}
+style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+</div>
+<textarea placeholder="Description" rows={4} value={listingForm.description} onChange={(e) => setListingForm({ ...listingForm, description: e.target.value })}
+style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8", resize: "vertical" }} />
+<input placeholder="Contact phone" value={listingForm.agentPhone} onChange={(e) => setListingForm({ ...listingForm, agentPhone: e.target.value })}
+style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+<div style={{ fontSize: 12, color: "#8A8578", display: "flex", alignItems: "center", gap: 5 }}>
+<CameraIcon size={13} /> Photo upload isn't wired up in this version — listings show a colour tile instead.
+</div>
+
+<div style={{ background: "#FFFDF7", border: "1px solid #D8CFB8", borderRadius: 10, padding: 12 }}>
+<div style={{ fontSize: 13, color: "#4A453C", marginBottom: 8 }}>
+Posting a standard listing is <strong>free</strong>. Feature it for <strong>${FEATURED_FEE} via EcoCash</strong> to show at the top of search results with a gold badge.
+</div>
+<label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+<input type="checkbox" checked={listingForm.featured}
+onChange={(e) => { setListingForm({ ...listingForm, featured: e.target.checked }); setPaymentStatus("idle"); setFormError(""); }} />
+Feature this listing (${FEATURED_FEE})
+</label>
+
+{listingForm.featured && (
+<div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #D8CFB8" }}>
+{paymentStatus === "paid" ? (
+<div style={{ color: "#3B6D11", fontSize: 13, display: "flex", alignItems: "center", gap: 5 }}>
+<CheckIcon size={14} /> ${FEATURED_FEE} EcoCash payment confirmed
+</div>
+) : (
+<React.Fragment>
+<input placeholder="EcoCash number to charge" value={ecocashNumber} onChange={(e) => setEcocashNumber(e.target.value)}
+style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #D8CFB8", marginBottom: 8 }} />
+<button type="button" onClick={payEcocash} disabled={paymentStatus === "processing"}
+style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #C68B2C", background: paymentStatus === "processing" ? "#F3E1BB" : "#FFFDF7", color: "#6B4A16", fontWeight: 600, fontSize: 13 }}>
+{paymentStatus === "processing" ? "Confirming with EcoCash…" : `Pay $${FEATURED_FEE} via EcoCash`}
+</button>
+<div style={{ fontSize: 11, color: "#8A8578", marginTop: 6 }}>
+Simulated payment — no real money moves yet. See SETUP.md to connect a real payment API.
+</div>
+</React.Fragment>
+)}
+</div>
+)}
+</div>
+
+{formError && <div style={{ color: "#A32D2D", fontSize: 13 }}>{formError}</div>}
+{formSuccess && <div style={{ color: "#3B6D11", fontSize: 13 }}>Listing posted{listingForm.featured ? " and featured" : ""}.</div>}
+<button type="submit" style={{ padding: 12, borderRadius: 8, border: "none", background: "#7A3319", color: "#F6F1E4", fontWeight: 600, fontSize: 14 }}>
+Post listing
+</button>
+</form>
+</div>
+) : (
+<div style={{ textAlign: "center", padding: 40, color: "#8A8578" }}>
+Create an account first to add a listing.
+<div style={{ marginTop: 12 }}>
+<button onClick={() => setView("account")} style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #D8CFB8", background: "#FFFDF7" }}>Go to account</button>
+</div>
+</div>
+)
+)}
+
+{view === "account" && (
+<div style={{ maxWidth: 380, margin: "0 auto" }}>
+{user ? (
+<div style={{ background: "#FFFDF7", border: "1px solid #D8CFB8", borderRadius: 12, padding: 20, textAlign: "center" }}>
+<div style={{ width: 52, height: 52, borderRadius: "50%", background: "#F2DFD3", color: "#7A3319", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 18, margin: "0 auto 12px" }}>
+{user.name.slice(0, 1).toUpperCase()}
+</div>
+<div style={{ fontWeight: 600, fontSize: 16 }}>{user.name}</div>
+<div style={{ fontSize: 13, color: "#8A8578", marginBottom: 16 }}>{user.phone}</div>
+<div style={{ fontSize: 13, color: "#8A8578", marginBottom: 16 }}>
+{properties.filter((p) => p.agentName === user.name).length} listing(s) posted &middot; {favorites.length} saved
+</div>
+<button onClick={signOut} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #D8CFB8", background: "transparent" }}>Sign out</button>
+</div>
+) : (
+<React.Fragment>
+<h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, marginBottom: 12 }}>Create an account</h2>
+<form onSubmit={createAccount} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+<input placeholder="Your name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })}
+style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+<input placeholder="Phone number" value={authForm.phone} onChange={(e) => setAuthForm({ ...authForm, phone: e.target.value })}
+style={{ padding: 10, borderRadius: 8, border: "1px solid #D8CFB8" }} />
+{authError && <div style={{ color: "#A32D2D", fontSize: 13 }}>{authError}</div>}
+<button type="submit" style={{ padding: 12, borderRadius: 8, border: "none", background: "#7A3319", color: "#F6F1E4", fontWeight: 600 }}>
+Continue
+</button>
+</form>
+<p style={{ fontSize: 12, color: "#8A8578", marginTop: 10 }}>Simple accounts only — no password, stored on this device.</p>
+</React.Fragment>
+)}
+</div>
+)}
+</main>
+
+{selected && (
+<div onClick={() => setSelected(null)} style={{ position: "fixed", inset: 0, background: "rgba(43,38,32,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
+<div onClick={(e) => e.stopPropagation()} style={{ background: "#F6F1E4", borderRadius: "16px 16px 0 0", maxWidth: 480, width: "100%", maxHeight: "88vh", overflowY: "auto" }}>
+<div style={{ background: (TONE[selected.tone] || TONE.coral).bg, height: 160, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+<CameraIcon size={30} color={(TONE[selected.tone] || TONE.coral).fg} style={{ opacity: 0.5 }} />
+<button onClick={() => setSelected(null)} style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,253,247,0.9)", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
+<XIcon size={16} />
+</button>
+{selected.verified && (
+<div style={{ position: "absolute", top: selected.featured ? 44 : 12, left: 12, background: "#2B2620", color: "#F6F1E4", fontSize: 11, padding: "4px 10px", borderRadius: 10, display: "flex", alignItems: "center", gap: 4 }}>
+<CheckIcon size={11} /> Verified listing
+</div>
+)}
+{selected.featured && (
+<div style={{ position: "absolute", top: 12, left: 12, background: "#C68B2C", color: "#4A2F06", fontSize: 11, padding: "4px 10px", borderRadius: 10, fontWeight: 600 }}>
+Featured
+</div>
+)}
+</div>
+<div style={{ padding: 20 }}>
+<div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "#8A8578", marginBottom: 4 }}>
+{selected.listingType === "sale" ? "For sale" : "For rent"} &middot; {selected.category}
+</div>
+<h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, margin: "0 0 6px" }}>{selected.title}</h2>
+<div style={{ fontSize: 13, color: "#8A8578", marginBottom: 10, display: "flex", alignItems: "center", gap: 4 }}>
+<MapPinIcon size={13} /> {selected.location}
+</div>
+<div style={{ fontSize: 22, fontWeight: 600, color: "#7A3319", marginBottom: 14 }}>
+<Money price={selected.price} currency={selected.currency} listingType={selected.listingType} />
+</div>
+<div style={{ display: "flex", gap: 16, fontSize: 13, color: "#4A453C", marginBottom: 14, flexWrap: "wrap" }}>
+<span>Size: {selected.size}</span>
+{selected.bedrooms != null && <span>Bedrooms: {selected.bedrooms}</span>}
+</div>
+<p style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 18 }}>{selected.description}</p>
+<div style={{ borderTop: "1px solid #D8CFB8", paddingTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+<div>
+<div style={{ fontSize: 13, color: "#8A8578" }}>Listed by</div>
+<div style={{ fontWeight: 600 }}>{selected.agentName}</div>
+</div>
+<div style={{ display: "flex", gap: 8 }}>
+<button onClick={() => toggleFavorite(selected.id)} style={{ width: 40, height: 40, borderRadius: "50%", border: "1px solid #D8CFB8", background: "#FFFDF7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+<HeartIcon size={16} fill={favorites.includes(selected.id) ? "#7A3319" : "none"} color="#7A3319" />
+</button>
+<a href={`tel:${selected.agentPhone.replace(/\s/g, "")}`} style={{ padding: "10px 16px", borderRadius: 8, background: "#7A3319", color: "#F6F1E4", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+<PhoneIcon size={14} /> {selected.agentPhone}
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+)}
+</div>
+);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<FilabusiProperties />);
+</script>
+</body>
+</html>
+
 
