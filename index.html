@@ -15,9 +15,6 @@
 <!-- Babel standalone -->
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<!-- Supabase client -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; font-family: 'Public Sans', sans-serif; background: #F6F1E4; color: #2B2620; }
@@ -28,6 +25,12 @@ input, select, textarea { font-family: inherit; }
 <body>
 <div id="root"></div>
 
+<!-- Import Supabase via ES module -->
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+window.createSupabaseClient = createClient;
+</script>
+
 <!-- Set data-presets="react" explicitly to handle JSX in React 18 via CDN -->
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo } = React;
@@ -35,8 +38,8 @@ const { useState, useEffect, useMemo } = React;
 const SUPABASE_URL = "";
 const SUPABASE_ANON_KEY = "";
 
-const supabaseClient = (SUPABASE_URL && SUPABASE_ANON_KEY)
-? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const supabaseClient = (SUPABASE_URL && SUPABASE_ANON_KEY && window.createSupabaseClient)
+? window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 : null;
 
 const LOCATIONS = ["Filabusi Town", "Mbalabala", "Fort Rixon", "Avoca", "Insiza Rural", "Maphisa Road"];
@@ -558,5 +561,4 @@ root.render(<FilabusiProperties />);
 </script>
 </body>
 </html>
-
 
