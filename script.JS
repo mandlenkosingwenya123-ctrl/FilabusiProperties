@@ -1,0 +1,566 @@
+// ====== EDIT THESE TWO LINES to connect a shared Supabase database ======
+// Leave blank to run on sample data only (each visitor sees the same seed listings,
+// but new posts are only saved on their own device).
+// Run supabase-schema.sql in your Supabase project's SQL editor first.
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+// ==========================================================================
+
+const LOCATIONS = ["Filabusi Town", "Mbalabala", "Fort Rixon", "Avoca", "Insiza Rural", "Maphisa Road"];
+const CATEGORIES = ["Residential stand", "House", "Agricultural plot", "Commercial stand"];
+const FEATURED_FEE = 30;
+const MAX_PHOTOS = 5;
+const MAX_PHOTO_DIMENSION = 900; // px, longest side after resize
+const PHOTO_JPEG_QUALITY = 0.72;
+
+const SEED_PROPERTIES = [
+{ id: "p1", title: "3-bedroom brick home, fenced yard", listingType: "sale", category: "House", price: 18000, currency: "USD", location: "Filabusi Town", size: "1200 sqm stand", bedrooms: 3, description: "Solid brick-under-tile home close to the growth point. Borehole on site, fruit trees, durawall fencing.", agentName: "Thabani Moyo", agentPhone: "+263 77 123 4567", verified: true, featured: false, tone: "coral", photos: [], createdAt: 6 },
+{ id: "p2", title: "Residential stand, ready to build", listingType: "sale", category: "Residential stand", price: 3500, currency: "USD", location: "Mbalabala", size: "800 sqm", bedrooms: null, description: "Cleared, pegged stand along the Mbalabala road. Offer letter available, close to clinic and school.", agentName: "Nomvula Ncube", agentPhone: "+263 71 234 5678", verified: true, featured: false, tone: "green", photos: [], createdAt: 5 },
+{ id: "p3", title: "2-bedroom cottage to let", listingType: "rent", category: "House", price: 90, currency: "USD", location: "Filabusi Town", size: "—", bedrooms: 2, description: "Quiet cottage with own entrance, water tank, and solar backup. Ideal for a small family or teacher posting.", agentName: "Sipho Dube", agentPhone: "+263 78 345 6789", verified: false, featured: false, tone: "amber", photos: [], createdAt: 4 },
+{ id: "p4", title: "5-acre agricultural plot", listingType: "sale", category: "Agricultural plot", price: 6000, currency: "USD", location: "Insiza Rural", size: "5 acres", bedrooms: null, description: "Grazing and cropping land near the Insiza river line. Communal land, negotiable through village head.", agentName: "Thabani Moyo", agentPhone: "+263 77 123 4567", verified: false, featured: false, tone: "green", photos: [], createdAt: 3 },
+{ id: "p5", title: "Shop premises on main road", listingType: "rent", category: "Commercial stand", price: 250, currency: "USD", location: "Filabusi Town", size: "60 sqm", bedrooms: null, description: "Trading space fronting the main Filabusi–Bulawayo road, high foot traffic, roller door, ZESA connected.", agentName: "Nomvula Ncube", agentPhone: "+263 71 234 5678", verified: true, featured: false, tone: "coral", photos: [], createdAt: 2 },
+{ id: "p6", title: "Stand near Fort Rixon growth point", listingType: "sale", category: "Residential stand", price: 2200, currency: "USD", location: "Fort Rixon", size: "700 sqm", bedrooms: null, description: "Affordable stand a short walk from the growth point shops and bus terminus.", agentName: "Sipho Dube", agentPhone: "+263 78 345 6789", verified: false, featured: false, tone: "amber", photos: [], createdAt: 1 },
+];
+
+const supabaseReady = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+
+// ---------- State ----------
+let properties = [];
+let favorites = [];
+let user = null;
+let currentView = "browse";
+let selectedProperty = null;
+let paymentStatus = "idle";
+let pendingPhotos = []; // dataURLs staged for the listing currently being created
+let modalActivePhotoIndex = 0;
+
+// ---------- Init ----------
+document.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+populateSelect("filterLocation", LOCATIONS, "All areas");
+populateSelect("filterCategory", CATEGORIES, "All types");
+populateSelect("f_category", CATEGORIES);
+populateSelect("f_location", LOCATIONS);
+document.getElementById("feeAmount").textContent = FEATURED_FEE;
+document.getElementById("feeAmount2").textContent = FEATURED_FEE;
+renderAreaChips();
+
+try { favorites = JSON.parse(localStorage.getItem("filaproperty_favorites") || "[]"); } catch (e) { favorites = []; }
+try { user = JSON.parse(localStorage.getItem("filaproperty_account") || "null"); } catch (e) { user = null; }
+
+properties = await loadProperties();
+
+bindNav();
+bindBrowse();
+bindAddForm();
+bindAccountForm();
+bindModal();
+
+renderBrowse();
+renderAccount();
+renderAddGate();
+}
+
+function populateSelect(id, items, firstLabel) {
+const el = document.getElementById(id);
+if (firstLabel) {
+const opt = document.createElement("option");
+opt.textContent = firstLabel;
+el.appendChild(opt);
+}
+items.forEach((item) => {
+const opt = document.createElement("option");
+opt.value = item;
+opt.textContent = item;
+el.appendChild(opt);
+});
+}
+
+function renderAreaChips() {
+const wrap = document.getElementById("areaChips");
+const areas = ["All areas", ...LOCATIONS];
+wrap.innerHTML = areas.map((a, i) => `<button type="button" class="chip ${i === 0 ? "active" : ""}" data-area="${a}">${a}</button>`).join("");
+wrap.querySelectorAll(".chip").forEach((chip) => {
+chip.addEventListener("click", () => {
+wrap.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+chip.classList.add("active");
+document.getElementById("filterLocation").value = chip.dataset.area;
+renderBrowse();
+});
+});
+}
+
+// ---------- Data (Supabase REST, or local fallback) ----------
+async function loadProperties() {
+if (!supabaseReady) return [...SEED_PROPERTIES];
+try {
+const res = await fetch(`${SUPABASE_URL}/rest/v1/properties?select=data&order=created_at.desc`, {
+headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+});
+if (!res.ok) throw new Error("Supabase request failed");
+const rows = await res.json();
+if (rows.length === 0) {
+await Promise.all(SEED_PROPERTIES.map((p) => insertProperty(p)));
+return [...SEED_PROPERTIES];
+}
+return rows.map((r) => r.data);
+} catch (err) {
+console.error("Supabase load failed, using sample data:", err);
+return [...SEED_PROPERTIES];
+}
+}
+
+async function insertProperty(p) {
+if (!supabaseReady) return;
+try {
+await fetch(`${SUPABASE_URL}/rest/v1/properties`, {
+method: "POST",
+headers: {
+apikey: SUPABASE_ANON_KEY,
+Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+"Content-Type": "application/json",
+Prefer: "return=minimal",
+},
+body: JSON.stringify([{ id: p.id, featured: p.featured, data: p }]),
+});
+} catch (err) {
+console.error("Supabase insert failed:", err);
+}
+}
+
+// ---------- Nav ----------
+function bindNav() {
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+btn.addEventListener("click", () => switchView(btn.dataset.view));
+});
+document.querySelectorAll("[data-goto]").forEach((btn) => {
+btn.addEventListener("click", () => switchView(btn.dataset.goto));
+});
+}
+
+function switchView(view) {
+currentView = view;
+document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
+document.getElementById(`view-${view}`).classList.remove("hidden");
+if (view === "favorites") renderFavorites();
+if (view === "add") renderAddGate();
+if (view === "browse") renderBrowse();
+}
+
+// ---------- Browse ----------
+function bindBrowse() {
+document.getElementById("searchInput").addEventListener("input", renderBrowse);
+document.getElementById("filterLocation").addEventListener("change", () => {
+syncChipsToFilter();
+renderBrowse();
+});
+document.getElementById("filterType").addEventListener("change", renderBrowse);
+document.getElementById("filterCategory").addEventListener("change", renderBrowse);
+document.getElementById("filterMaxPrice").addEventListener("input", renderBrowse);
+document.getElementById("sortBy").addEventListener("change", renderBrowse);
+document.getElementById("filtersToggle").addEventListener("click", () => {
+document.getElementById("filtersPanel").classList.toggle("hidden");
+});
+}
+
+function syncChipsToFilter() {
+const val = document.getElementById("filterLocation").value;
+document.querySelectorAll("#areaChips .chip").forEach((c) => c.classList.toggle("active", c.dataset.area === val));
+}
+
+function getFiltered() {
+const q = document.getElementById("searchInput").value.trim().toLowerCase();
+const loc = document.getElementById("filterLocation").value;
+const type = document.getElementById("filterType").value;
+const cat = document.getElementById("filterCategory").value;
+const maxPrice = document.getElementById("filterMaxPrice").value;
+
+return properties.filter((p) => {
+if (q && !p.title.toLowerCase().includes(q) && !p.location.toLowerCase().includes(q)) return false;
+if (loc !== "All areas" && p.location !== loc) return false;
+if (type !== "all" && p.listingType !== type) return false;
+if (cat !== "All types" && p.category !== cat) return false;
+if (maxPrice && p.price > Number(maxPrice)) return false;
+return true;
+});
+}
+
+function applySort(list) {
+const sortBy = document.getElementById("sortBy").value;
+const sorted = [...list];
+if (sortBy === "price-asc") sorted.sort((a, b) => a.price - b.price);
+else if (sortBy === "price-desc") sorted.sort((a, b) => b.price - a.price);
+else sorted.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+return sorted;
+}
+
+function sortFeaturedFirst(list) {
+return [...list].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
+}
+
+function renderBrowse() {
+const list = sortFeaturedFirst(applySort(getFiltered()));
+document.getElementById("resultsCount").textContent = `${list.length} propert${list.length === 1 ? "y" : "ies"} found`;
+renderGrid("browseGrid", list, "No properties match those filters. Try widening your search.");
+}
+
+function renderFavorites() {
+const list = sortFeaturedFirst(properties.filter((p) => favorites.includes(p.id)));
+renderGrid("favoritesGrid", list, "Nothing saved yet — tap the heart on a listing to save it.");
+}
+
+function renderGrid(containerId, list, emptyMessage) {
+const el = document.getElementById(containerId);
+if (list.length === 0) {
+el.innerHTML = `<div class="empty-msg">${emptyMessage}</div>`;
+return;
+}
+el.innerHTML = list.map(cardHtml).join("");
+el.querySelectorAll(".card").forEach((cardEl) => {
+const id = cardEl.dataset.id;
+cardEl.addEventListener("click", (e) => {
+if (e.target.closest(".fav-btn")) return;
+openModal(id);
+});
+cardEl.querySelector(".fav-btn").addEventListener("click", (e) => {
+e.stopPropagation();
+toggleFavorite(id);
+});
+});
+}
+
+function cardHtml(p) {
+const isFav = favorites.includes(p.id);
+const hasPhoto = p.photos && p.photos.length > 0;
+const imageInner = hasPhoto
+? `<img src="${p.photos[0]}" alt="${escapeHtml(p.title)}" />`
+: `<span class="placeholder-icon">📷</span>`;
+return `
+<div class="card ${p.featured ? "featured" : ""}" data-id="${p.id}">
+<div class="card-image tone-${p.tone}">
+${imageInner}
+${p.featured ? `<span class="card-badge badge-featured">Featured</span>` : ""}
+${p.verified ? `<span class="card-badge badge-verified" style="top:${p.featured ? "32px" : "8px"};">✓ Verified</span>` : ""}
+<button class="fav-btn">${isFav ? "❤️" : "🤍"}</button>
+<span class="badge-type">${p.listingType === "sale" ? "For sale" : "For rent"}</span>
+${hasPhoto && p.photos.length > 1 ? `<span class="badge-photocount">📷 ${p.photos.length}</span>` : ""}
+</div>
+<div class="card-body">
+<div class="card-title">${escapeHtml(p.title)}</div>
+<div class="card-location">📍 ${escapeHtml(p.location)}</div>
+<div class="card-price">${p.currency} ${p.price.toLocaleString()}${p.listingType === "rent" ? " / mo" : ""}</div>
+</div>
+</div>`;
+}
+
+function toggleFavorite(id) {
+favorites = favorites.includes(id) ? favorites.filter((f) => f !== id) : [...favorites, id];
+localStorage.setItem("filaproperty_favorites", JSON.stringify(favorites));
+if (currentView === "favorites") renderFavorites(); else renderBrowse();
+if (selectedProperty && selectedProperty.id === id) openModal(id);
+}
+
+// ---------- Modal ----------
+function bindModal() {
+document.getElementById("modalBackdrop").addEventListener("click", (e) => {
+if (e.target.id === "modalBackdrop") closeModal();
+});
+}
+
+function openModal(id) {
+const p = properties.find((x) => x.id === id);
+if (!p) return;
+selectedProperty = p;
+modalActivePhotoIndex = 0;
+renderModalContent();
+document.getElementById("modalBackdrop").classList.remove("hidden");
+}
+
+function renderModalContent() {
+const p = selectedProperty;
+const isFav = favorites.includes(p.id);
+const hasPhotos = p.photos && p.photos.length > 0;
+const activeSrc = hasPhotos ? p.photos[modalActivePhotoIndex] : null;
+
+document.getElementById("modalCard").innerHTML = `
+<div class="modal-image tone-${p.tone}">
+${activeSrc ? `<img src="${activeSrc}" alt="${escapeHtml(p.title)}" />` : `<span class="placeholder-icon" style="font-size:30px;">📷</span>`}
+<button class="modal-close" id="modalCloseBtn">✕</button>
+${p.verified ? `<span class="card-badge badge-verified" style="top:${p.featured ? "44px" : "12px"};">✓ Verified listing</span>` : ""}
+${p.featured ? `<span class="card-badge badge-featured" style="top:12px;">Featured</span>` : ""}
+</div>
+${hasPhotos && p.photos.length > 1 ? `
+<div class="modal-thumb-strip">
+${p.photos.map((src, i) => `<img data-idx="${i}" class="${i === modalActivePhotoIndex ? "active-thumb" : ""}" src="${src}" />`).join("")}
+</div>` : ""}
+<div class="modal-body">
+<div class="modal-kicker">${p.listingType === "sale" ? "For sale" : "For rent"} · ${escapeHtml(p.category)}</div>
+<h2 class="modal-title">${escapeHtml(p.title)}</h2>
+<div class="modal-location">📍 ${escapeHtml(p.location)}</div>
+<div class="modal-price">${p.currency} ${p.price.toLocaleString()}${p.listingType === "rent" ? " / mo" : ""}</div>
+<div class="modal-facts">
+<span>Size: ${escapeHtml(p.size)}</span>
+${p.bedrooms != null ? `<span>Bedrooms: ${p.bedrooms}</span>` : ""}
+</div>
+<p class="modal-desc">${escapeHtml(p.description)}</p>
+<div class="modal-footer">
+<div>
+<div class="modal-agent-label">Listed by</div>
+<div class="modal-agent-name">${escapeHtml(p.agentName)}</div>
+</div>
+<div class="modal-actions">
+<button class="modal-fav-btn" id="modalFavBtn">${isFav ? "❤️" : "🤍"}</button>
+<a class="modal-call-btn" href="tel:${p.agentPhone.replace(/\s/g, "")}">📞 ${escapeHtml(p.agentPhone)}</a>
+</div>
+</div>
+</div>
+`;
+document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+document.getElementById("modalFavBtn").addEventListener("click", () => toggleFavorite(p.id));
+document.querySelectorAll(".modal-thumb-strip img").forEach((thumb) => {
+thumb.addEventListener("click", () => {
+modalActivePhotoIndex = Number(thumb.dataset.idx);
+renderModalContent();
+});
+});
+}
+
+function closeModal() {
+document.getElementById("modalBackdrop").classList.add("hidden");
+selectedProperty = null;
+}
+
+// ---------- Account ----------
+function bindAccountForm() {
+document.getElementById("accountForm").addEventListener("submit", (e) => {
+e.preventDefault();
+const name = document.getElementById("acc_name").value.trim();
+const phone = document.getElementById("acc_phone").value.trim();
+const errEl = document.getElementById("authError");
+if (!name || !phone) {
+errEl.textContent = "Enter your name and phone number.";
+errEl.classList.remove("hidden");
+return;
+}
+errEl.classList.add("hidden");
+user = { name, phone };
+localStorage.setItem("filaproperty_account", JSON.stringify(user));
+renderAccount();
+renderAddGate();
+});
+document.getElementById("signOutBtn").addEventListener("click", () => {
+user = null;
+localStorage.removeItem("filaproperty_account");
+renderAccount();
+renderAddGate();
+});
+}
+
+function renderAccount() {
+const loggedOut = document.getElementById("accountLoggedOut");
+const loggedIn = document.getElementById("accountLoggedIn");
+if (user) {
+loggedOut.classList.add("hidden");
+loggedIn.classList.remove("hidden");
+document.getElementById("avatarLetter").textContent = user.name.slice(0, 1).toUpperCase();
+document.getElementById("accountName").textContent = user.name;
+document.getElementById("accountPhone").textContent = user.phone;
+const listingCount = properties.filter((p) => p.agentName === user.name).length;
+document.getElementById("accountStats").textContent = `${listingCount} listing(s) posted · ${favorites.length} saved`;
+} else {
+loggedOut.classList.remove("hidden");
+loggedIn.classList.add("hidden");
+}
+}
+
+// ---------- Add listing ----------
+function renderAddGate() {
+const gate = document.getElementById("addLoggedOut");
+const form = document.getElementById("addForm");
+if (user) {
+gate.classList.add("hidden");
+form.classList.remove("hidden");
+document.getElementById("postingAsName").textContent = user.name;
+} else {
+gate.classList.remove("hidden");
+form.classList.add("hidden");
+}
+}
+
+function bindAddForm() {
+document.getElementById("f_photos").addEventListener("change", handlePhotoSelect);
+
+document.getElementById("f_featured").addEventListener("change", (e) => {
+document.getElementById("ecocashBox").classList.toggle("hidden", !e.target.checked);
+paymentStatus = "idle";
+document.getElementById("ecocashUnpaid").classList.remove("hidden");
+document.getElementById("ecocashPaid").classList.add("hidden");
+hideFormError();
+});
+
+document.getElementById("payBtn").addEventListener("click", () => {
+const num = document.getElementById("ecocashNumber").value.trim();
+if (!num) {
+showFormError("Enter the EcoCash number to charge.");
+return;
+}
+hideFormError();
+const btn = document.getElementById("payBtn");
+btn.disabled = true;
+btn.textContent = "Confirming with EcoCash…";
+setTimeout(() => {
+paymentStatus = "paid";
+document.getElementById("ecocashUnpaid").classList.add("hidden");
+document.getElementById("ecocashPaid").classList.remove("hidden");
+btn.disabled = false;
+btn.textContent = "Pay via EcoCash";
+}, 1400);
+});
+
+document.getElementById("addForm").addEventListener("submit", async (e) => {
+e.preventDefault();
+const title = document.getElementById("f_title").value.trim();
+const price = document.getElementById("f_price").value;
+const size = document.getElementById("f_size").value.trim();
+const description = document.getElementById("f_description").value.trim();
+const agentPhone = document.getElementById("f_agentPhone").value.trim();
+const featured = document.getElementById("f_featured").checked;
+const bedrooms = document.getElementById("f_bedrooms").value;
+
+if (!title || !price || !size || !description || !agentPhone) {
+showFormError("Fill in every field before posting.");
+return;
+}
+if (Number(price) <= 0) {
+showFormError("Enter a price greater than zero.");
+return;
+}
+if (featured && paymentStatus !== "paid") {
+showFormError("Complete the EcoCash payment to feature this listing.");
+return;
+}
+hideFormError();
+
+const tones = ["coral", "green", "amber"];
+const newListing = {
+id: "p" + Date.now(),
+title,
+listingType: document.getElementById("f_listingType").value,
+category: document.getElementById("f_category").value,
+price: Number(price),
+currency: document.getElementById("f_currency").value,
+location: document.getElementById("f_location").value,
+size,
+bedrooms: bedrooms ? Number(bedrooms) : null,
+description,
+agentName: user.name,
+agentPhone,
+verified: false,
+featured,
+tone: tones[Math.floor(Math.random() * tones.length)],
+photos: [...pendingPhotos],
+createdAt: Date.now(),
+};
+
+await insertProperty(newListing);
+properties = [newListing, ...properties];
+
+document.getElementById("formSuccess").classList.remove("hidden");
+setTimeout(() => document.getElementById("formSuccess").classList.add("hidden"), 2500);
+e.target.reset();
+document.getElementById("ecocashBox").classList.add("hidden");
+paymentStatus = "idle";
+pendingPhotos = [];
+renderPhotoPreviews();
+renderBrowse();
+renderAccount();
+});
+}
+
+function showFormError(msg) {
+const el = document.getElementById("formError");
+el.textContent = msg;
+el.classList.remove("hidden");
+}
+function hideFormError() {
+document.getElementById("formError").classList.add("hidden");
+}
+
+// ---------- Photo upload + client-side compression ----------
+async function handlePhotoSelect(e) {
+const files = Array.from(e.target.files || []);
+e.target.value = ""; // allow re-selecting the same file later
+
+const room = MAX_PHOTOS - pendingPhotos.length;
+if (room <= 0) {
+showFormError(`You can add up to ${MAX_PHOTOS} photos.`);
+return;
+}
+const toProcess = files.slice(0, room);
+
+for (const file of toProcess) {
+if (!file.type.startsWith("image/")) continue;
+try {
+const dataUrl = await compressImage(file);
+pendingPhotos.push(dataUrl);
+} catch (err) {
+console.error("Photo processing failed:", err);
+}
+}
+renderPhotoPreviews();
+}
+
+function compressImage(file) {
+return new Promise((resolve, reject) => {
+const reader = new FileReader();
+reader.onerror = () => reject(reader.error);
+reader.onload = () => {
+const img = new Image();
+img.onerror = () => reject(new Error("Could not read image"));
+img.onload = () => {
+let { width, height } = img;
+if (width > height && width > MAX_PHOTO_DIMENSION) {
+height = Math.round((height * MAX_PHOTO_DIMENSION) / width);
+width = MAX_PHOTO_DIMENSION;
+} else if (height > MAX_PHOTO_DIMENSION) {
+width = Math.round((width * MAX_PHOTO_DIMENSION) / height);
+height = MAX_PHOTO_DIMENSION;
+}
+const canvas = document.createElement("canvas");
+canvas.width = width;
+canvas.height = height;
+const ctx = canvas.getContext("2d");
+ctx.drawImage(img, 0, 0, width, height);
+resolve(canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY));
+};
+img.src = reader.result;
+};
+reader.readAsDataURL(file);
+});
+}
+
+function renderPhotoPreviews() {
+const grid = document.getElementById("photoPreviewGrid");
+grid.innerHTML = pendingPhotos.map((src, i) => `
+<div class="photo-thumb">
+<img src="${src}" />
+<button type="button" class="remove-thumb" data-idx="${i}">✕</button>
+</div>
+`).join("");
+grid.querySelectorAll(".remove-thumb").forEach((btn) => {
+btn.addEventListener("click", () => {
+pendingPhotos.splice(Number(btn.dataset.idx), 1);
+renderPhotoPreviews();
+});
+});
+}
+
+// ---------- Utils ----------
+function escapeHtml(str) {
+const div = document.createElement("div");
+div.textContent = str == null ? "" : String(str);
+return div.innerHTML;
+}
+
