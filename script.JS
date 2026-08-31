@@ -268,3 +268,4 @@ flex-wrap: wrap;
 .footer-static { font-size: 13px; color: #B9AF9A; line-height: 1.8; }
 .footer-bottom { max-width: 1080px; margin: 26px auto 0; padding-top: 16px; border-top: 1px solid rgba(246,241,228,0.12); font-size: 12px; color: #8A8578; }
 
+
