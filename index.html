@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FilabusiProperties — Buy, Sell & Rent in Filabusi</title>
+<title>FilabusiProperties — Land & Property in Insiza District</title>
 <meta name="description" content="Buy, sell, and rent property in Filabusi and Insiza District. Search listings by location and price, contact agents directly, and post your own stand, house, or plot." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
@@ -37,11 +37,50 @@
 <section id="view-browse" class="view">
 
 <div class="hero">
-<h1 class="hero-title">Find land and property<br>around Filabusi</h1>
-<p class="hero-sub">Stands, houses, plots and shops across Insiza District — listed directly by local agents and owners.</p>
-<div class="hero-chips" id="areaChips"></div>
+<svg class="hero-motif" viewBox="0 0 900 520" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+<ellipse cx="760" cy="260" rx="330" ry="330" fill="none" stroke="#F6F1E4" stroke-opacity="0.14" stroke-width="1.5"/>
+<ellipse cx="760" cy="260" rx="255" ry="255" fill="none" stroke="#F6F1E4" stroke-opacity="0.16" stroke-width="1.5" stroke-dasharray="2 6"/>
+<ellipse cx="760" cy="260" rx="180" ry="180" fill="none" stroke="#F6F1E4" stroke-opacity="0.2" stroke-width="1.5"/>
+<ellipse cx="760" cy="260" rx="105" ry="105" fill="none" stroke="#F6F1E4" stroke-opacity="0.28" stroke-width="1.5" stroke-dasharray="2 6"/>
+<path d="M470 40 C 560 120, 560 200, 660 260 C 760 320, 760 400, 850 480" fill="none" stroke="#F6F1E4" stroke-opacity="0.18" stroke-width="1.5"/>
+<path d="M420 90 C 520 150, 520 230, 630 290" fill="none" stroke="#F6F1E4" stroke-opacity="0.14" stroke-width="1.5"/>
+<path d="M690 176 L 760 232 L 830 158" fill="none" stroke="#F6F1E4" stroke-opacity="0.55" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+<div class="hero-content">
+<p class="hero-kicker">A place-based marketplace, not a franchise</p>
+<h1 class="hero-title">Land and property,<br>bought and sold locally</h1>
+<p class="hero-sub">Stands, houses, agricultural plots and shops across Filabusi and the wider Insiza District — listed straight from agents and owners on the ground, easy to browse from Bulawayo, Harare, or abroad.</p>
+<div class="hero-actions">
+<button class="btn-hero-primary" id="heroExploreBtn">Browse listings</button>
+<button class="btn-hero-secondary" data-goto="add">List a property</button>
+</div>
+</div>
+<div class="search-card" id="heroSearchCard">
+<div class="search-card-field">
+<label>Location</label>
+<select id="heroLocation"><option>All areas</option></select>
+</div>
+<div class="search-card-field">
+<label>Looking to</label>
+<select id="heroType">
+<option value="all">Buy or rent</option>
+<option value="sale">Buy</option>
+<option value="rent">Rent</option>
+</select>
+</div>
+<div class="search-card-field">
+<label>Max price (USD)</label>
+<input id="heroMaxPrice" type="number" min="0" placeholder="No limit" />
+</div>
+<button class="search-card-btn" id="heroSearchBtn">Search</button>
+</div>
 </div>
 
+<div class="stats-strip" id="statsStrip"></div>
+
+<div class="area-chip-row" id="areaChips"></div>
+
+<div class="listings-anchor" id="listingsAnchor"></div>
 <div class="search-row">
 <div class="search-input-wrap">
 <span class="search-icon">🔎</span>
@@ -86,6 +125,43 @@
 </div>
 
 <div id="browseGrid" class="grid"></div>
+
+<div class="feature-row">
+<div class="feature-item">
+<div class="feature-icon">📞</div>
+<div class="feature-title">Straight to the agent</div>
+<div class="feature-desc">No middlemen or call centres — every listing links to the agent or owner's own phone number.</div>
+</div>
+<div class="feature-item">
+<div class="feature-icon">💚</div>
+<div class="feature-title">EcoCash-friendly</div>
+<div class="feature-desc">Agents can feature a listing for $30 paid straight through EcoCash, no bank account needed.</div>
+</div>
+<div class="feature-item">
+<div class="feature-icon">🏠</div>
+<div class="feature-title">Built for this district</div>
+<div class="feature-desc">Only Filabusi and Insiza District — no Harare or Bulawayo listings crowding your search.</div>
+</div>
+<div class="feature-item">
+<div class="feature-icon">✈️</div>
+<div class="feature-title">Diaspora-friendly</div>
+<div class="feature-desc">Light enough to browse on mobile data from anywhere, with details clear enough to decide from afar.</div>
+</div>
+</div>
+
+<div class="about-strip">
+<svg class="about-motif" viewBox="0 0 200 200" aria-hidden="true">
+<circle cx="100" cy="100" r="90" fill="none" stroke="#7A3319" stroke-opacity="0.25" stroke-width="2" stroke-dasharray="2 5"/>
+<circle cx="100" cy="100" r="65" fill="none" stroke="#7A3319" stroke-opacity="0.35" stroke-width="1.5"/>
+<path d="M65 108 L90 133 L138 82" fill="none" stroke="#7A3319" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+<div class="about-text">
+<p class="about-kicker">Why this exists</p>
+<h2 class="about-title">A directory built for one district, not the whole country</h2>
+<p class="about-body">Most property sites treat Filabusi as an afterthought buried under national listings. This one doesn't — every stand, plot, and house here is local, so what you see is what's actually available around Insiza.</p>
+</div>
+</div>
+
 </section>
 
 <!-- FAVORITES -->
@@ -181,6 +257,29 @@ Feature this listing ($<span id="feeAmount2"></span>)
 </section>
 
 </main>
+
+<footer class="site-footer">
+<div class="footer-top">
+<div class="footer-brand">
+<div class="footer-brand-name">FilabusiProperties</div>
+<p class="footer-brand-desc">A local property directory for Filabusi and Insiza District — search, save, and list stands, houses, plots and shops.</p>
+</div>
+<div class="footer-col">
+<div class="footer-col-title">Navigate</div>
+<button class="footer-link" data-goto="browse">Browse listings</button>
+<button class="footer-link" data-goto="favorites">Saved properties</button>
+<button class="footer-link" data-goto="add">List a property</button>
+<button class="footer-link" data-goto="account">Account</button>
+</div>
+<div class="footer-col">
+<div class="footer-col-title">Areas covered</div>
+<span class="footer-static" id="footerAreas"></span>
+</div>
+</div>
+<div class="footer-bottom">
+<span>© <span id="footerYear"></span> FilabusiProperties — Insiza District</span>
+</div>
+</footer>
 
 <!-- DETAIL MODAL -->
 <div id="modalBackdrop" class="modal-backdrop hidden">
